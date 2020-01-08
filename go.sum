@@ -1,3 +1,5 @@
+github.com/ljpx/logging v0.0.1 h1:cNzG4YhrgqpFAJRzdpVBlfwBDHR5tfgggAqkJdryT+M=
+github.com/ljpx/logging v0.0.1/go.mod h1:SariYdeo4ITX8DYb40LcW+3ALImF9t3wzYZm79X1/9k=
 github.com/ljpx/test v0.0.4 h1:LQ7wKUtXIYnDQkOw3jcG9iHkDZF4QcLuS2PqxhN4Etk=
 github.com/ljpx/test v0.0.4/go.mod h1:5/m8MhiPRPC9iRtUtmc1MCvZYT2FOvu17iyu/pBWt24=
 github.com/mattn/go-sqlite3 v2.0.2+incompatible h1:qzw9c2GNT8UFrgWNDhCTqRqYUSmu/Dav/9Z58LGpk7U=

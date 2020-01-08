@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ljpx/logging"
+
 	"github.com/ljpx/test"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -16,6 +18,8 @@ import (
 type DefaultMigratorFixture struct {
 	db               *sql.DB
 	databaseFileName string
+	logger           *logging.DummyLogger
+	migrator         *DefaultMigrator
 }
 
 func SetupDefaultMigratorFixture(t *testing.T) *DefaultMigratorFixture {
@@ -25,9 +29,13 @@ func SetupDefaultMigratorFixture(t *testing.T) *DefaultMigratorFixture {
 	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%v", databaseFileName))
 	test.That(t, err).IsNil()
 
+	logger := logging.NewDummyLogger()
+
 	return &DefaultMigratorFixture{
 		db:               db,
 		databaseFileName: databaseFileName,
+		logger:           logger,
+		migrator:         NewDefaultMigrator(db, NewSQLite3Dictionary(), logger),
 	}
 }
 
@@ -41,10 +49,8 @@ func TestDefaultMigratorInitializesWithNoMigrationsSuccessfully(t *testing.T) {
 	fixture := SetupDefaultMigratorFixture(t)
 	defer TearDownDefaultMigratorFixture(fixture)
 
-	migrator := NewDefaultMigrator(fixture.db, NewSQLite3Dictionary())
-
 	// Act.
-	err := migrator.Migrate(0)
+	err := fixture.migrator.Migrate(0)
 
 	// Assert.
 	test.That(t, err).IsNil()
@@ -68,12 +74,10 @@ func TestDefaultMigratorMigratesForwardsSuccessfully(t *testing.T) {
 	fixture := SetupDefaultMigratorFixture(t)
 	defer TearDownDefaultMigratorFixture(fixture)
 
-	migrator := NewDefaultMigrator(fixture.db, NewSQLite3Dictionary())
-
 	// Act.
-	migrator.Use(&testMigration1{})
-	migrator.Use(&testMigration2{})
-	err := migrator.Migrate(2)
+	fixture.migrator.Use(&testMigration1{})
+	fixture.migrator.Use(&testMigration2{})
+	err := fixture.migrator.Migrate(2)
 
 	// Assert.
 	test.That(t, err).IsNil()
@@ -91,6 +95,9 @@ func TestDefaultMigratorMigratesForwardsSuccessfully(t *testing.T) {
 	test.That(t, count).IsEqualTo(1)
 	test.That(t, id).IsEqualTo(42)
 	test.That(t, name).IsEqualTo("John Smith")
+
+	fixture.logger.AssertLogged(t, "Migrated up to 'Test Migration 1' successfully.\n")
+	fixture.logger.AssertLogged(t, "Migrated up to 'Test Migration 2' successfully.\n")
 }
 
 func TestDefaultMigratorMigratesForwardsStepwiseSuccessfully(t *testing.T) {
@@ -98,16 +105,14 @@ func TestDefaultMigratorMigratesForwardsStepwiseSuccessfully(t *testing.T) {
 	fixture := SetupDefaultMigratorFixture(t)
 	defer TearDownDefaultMigratorFixture(fixture)
 
-	migrator := NewDefaultMigrator(fixture.db, NewSQLite3Dictionary())
-
 	// Act.
-	migrator.Use(&testMigration1{})
-	migrator.Use(&testMigration2{})
+	fixture.migrator.Use(&testMigration1{})
+	fixture.migrator.Use(&testMigration2{})
 
-	err := migrator.Migrate(1)
+	err := fixture.migrator.Migrate(1)
 	test.That(t, err).IsNil()
 
-	err = migrator.Migrate(2)
+	err = fixture.migrator.Migrate(2)
 
 	// Assert.
 	test.That(t, err).IsNil()
@@ -125,6 +130,9 @@ func TestDefaultMigratorMigratesForwardsStepwiseSuccessfully(t *testing.T) {
 	test.That(t, count).IsEqualTo(1)
 	test.That(t, id).IsEqualTo(42)
 	test.That(t, name).IsEqualTo("John Smith")
+
+	fixture.logger.AssertLogged(t, "Migrated up to 'Test Migration 1' successfully.\n")
+	fixture.logger.AssertLogged(t, "Migrated up to 'Test Migration 2' successfully.\n")
 }
 
 func TestDefaultMigratorMigratesBackwardsSuccessfully(t *testing.T) {
@@ -132,15 +140,13 @@ func TestDefaultMigratorMigratesBackwardsSuccessfully(t *testing.T) {
 	fixture := SetupDefaultMigratorFixture(t)
 	defer TearDownDefaultMigratorFixture(fixture)
 
-	migrator := NewDefaultMigrator(fixture.db, NewSQLite3Dictionary())
-
-	migrator.Use(&testMigration1{})
-	migrator.Use(&testMigration2{})
-	err := migrator.Migrate(2)
+	fixture.migrator.Use(&testMigration1{})
+	fixture.migrator.Use(&testMigration2{})
+	err := fixture.migrator.Migrate(2)
 	test.That(t, err).IsNil()
 
 	// Act.
-	err = migrator.Migrate(1)
+	err = fixture.migrator.Migrate(1)
 
 	// Assert.
 	test.That(t, err).IsNil()
@@ -156,6 +162,10 @@ func TestDefaultMigratorMigratesBackwardsSuccessfully(t *testing.T) {
 	test.That(t, *count).IsEqualTo(0)
 	test.That(t, id).IsNil()
 	test.That(t, name).IsNil()
+
+	fixture.logger.AssertLogged(t, "Migrated up to 'Test Migration 1' successfully.\n")
+	fixture.logger.AssertLogged(t, "Migrated up to 'Test Migration 2' successfully.\n")
+	fixture.logger.AssertLogged(t, "Migrated down from 'Test Migration 2' successfully.\n")
 }
 
 func TestDefaultMigratorMigratesForwardsConcurrentlySuccessfully(t *testing.T) {
@@ -168,7 +178,7 @@ func TestDefaultMigratorMigratesForwardsConcurrentlySuccessfully(t *testing.T) {
 	wg.Add(3)
 
 	closure := func() {
-		migrator := NewDefaultMigrator(fixture.db, NewSQLite3Dictionary())
+		migrator := NewDefaultMigrator(fixture.db, NewSQLite3Dictionary(), logging.NewDummyLogger())
 		migrator.Use(&testMigration1{})
 		migrator.Use(&testMigration2{})
 		errc <- migrator.Migrate(2)

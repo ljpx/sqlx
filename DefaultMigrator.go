@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"sort"
 	"time"
+
+	"github.com/ljpx/logging"
 )
 
 // DefaultMigrator is the default migrator in the package.  It is not thread
@@ -11,6 +13,7 @@ import (
 type DefaultMigrator struct {
 	db         Database
 	dictionary Dictionary
+	logger     logging.Logger
 
 	migrations map[uint64]Migration
 }
@@ -26,10 +29,11 @@ const (
 
 // NewDefaultMigrator creates a new DefaultMigrator for the provided database
 // using the provided Dictionary.
-func NewDefaultMigrator(db Database, dictionary Dictionary) *DefaultMigrator {
+func NewDefaultMigrator(db Database, dictionary Dictionary, logger logging.Logger) *DefaultMigrator {
 	return &DefaultMigrator{
 		db:         db,
 		dictionary: dictionary,
+		logger:     logger,
 
 		migrations: make(map[uint64]Migration),
 	}
@@ -70,6 +74,11 @@ func (m *DefaultMigrator) Migrate(timestamp uint64) error {
 			return nil
 		}
 
+		directionName := "up to"
+		if direction == -1 {
+			directionName = "down from"
+		}
+
 		for _, migration := range migrations {
 			if direction == 1 {
 				err = migrationUpDownUp(tx, m.dictionary.Dialect(), migration)
@@ -85,6 +94,8 @@ func (m *DefaultMigrator) Migrate(timestamp uint64) error {
 			if err != nil {
 				return err
 			}
+
+			m.logger.Printf("Migrated %v '%v' successfully.\n", directionName, migration.Name())
 		}
 
 		return nil
